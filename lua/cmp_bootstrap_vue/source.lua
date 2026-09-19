@@ -77,8 +77,8 @@ local function load_bootstrap_components()
   end
 
   for _, pkg in ipairs(packages) do
-    local tags = utils.load_vetur_tags(root, pkg)
-    local attrs = utils.load_vetur_attributes(root, pkg)
+    -- Load metadata with automatic fallback support
+    local tags, attrs = utils.load_metadata(root, pkg)
 
     if tags then
       -- Use namespacing to avoid collisions
@@ -95,7 +95,7 @@ local function load_bootstrap_components()
       end
       table.insert(loaded_packages, pkg)
     else
-      utils.notify('Failed to load vetur-tags.json from ' .. pkg, vim.log.levels.WARN)
+      utils.notify('Failed to load metadata from ' .. pkg, vim.log.levels.WARN)
     end
 
     if attrs then
@@ -109,7 +109,7 @@ local function load_bootstrap_components()
         end
       end
     else
-      utils.notify('Failed to load vetur-attributes.json from ' .. pkg, vim.log.levels.WARN)
+      utils.notify('Failed to load attributes from ' .. pkg, vim.log.levels.WARN)
     end
   end
 

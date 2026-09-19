@@ -8,6 +8,11 @@ local config = {
     'bootstrap-vue',
     'bootstrap-vue-next',
   },
+  -- Fallback packages for when metadata is not found
+  -- e.g., bootstrap-vue-next doesn't provide Vetur/web-types, so use bootstrap-vue's metadata
+  fallback_packages = {
+    ['bootstrap-vue-next'] = 'bootstrap-vue',
+  },
   notification_level = vim.log.levels.WARN,
 }
 
@@ -165,6 +170,148 @@ function M.load_vetur_attributes(root, package_name)
     return nil
   end
   return M.read_json_file(attrs_path)
+end
+
+--- Load and convert web-types.json to Vetur format
+--- @param root string The project root directory
+--- @param package_name string The package name
+--- @return table|nil, table|nil The parsed tags and attributes or nil if not found
+function M.load_web_types(root, package_name)
+  local base_path = root .. '/node_modules/' .. package_name
+
+  -- Try different locations for web-types.json
+  local web_types_paths = {
+    base_path .. '/dist/web-types.json',
+    base_path .. '/web-types.json',
+  }
+
+  local web_types = nil
+  local found_path = nil
+
+  for _, path in ipairs(web_types_paths) do
+    if vim.fn.filereadable(path) == 1 then
+      web_types = M.read_json_file(path)
+      if web_types then
+        found_path = path
+        break
+      end
+    end
+  end
+
+  if not web_types then
+    M.notify('web-types.json not found for ' .. package_name, vim.log.levels.DEBUG)
+    return nil, nil
+  end
+
+  M.notify('Using web-types.json from: ' .. found_path, vim.log.levels.DEBUG)
+
+  -- Convert web-types.json to Vetur format
+  local tags = {}
+  local attributes = {}
+
+  -- Extract components from contributions.html.vue-components
+  local components = {}
+  if web_types.contributions and web_types.contributions.html then
+    components = web_types.contributions.html['vue-components'] or {}
+  end
+
+  for _, component in ipairs(components) do
+    local tag_name = component.name
+    if tag_name then
+      -- Build attributes list
+      local attr_names = {}
+      local props = component.props or {}
+
+      for _, prop in ipairs(props) do
+        local prop_name = prop.name
+        if prop_name then
+          table.insert(attr_names, prop_name)
+
+          -- Store attribute info
+          local attr_key = tag_name .. '/' .. prop_name
+          attributes[attr_key] = {
+            description = prop.description or '',
+            type = prop.type or 'any',
+            default = prop.default,
+          }
+        end
+      end
+
+      -- Store tag info
+      tags[tag_name] = {
+        description = component.description or '',
+        attributes = attr_names,
+      }
+    end
+  end
+
+  if next(tags) then
+    M.notify('Loaded ' .. vim.tbl_count(tags) .. ' components from web-types.json (' .. package_name .. ')', vim.log.levels.DEBUG)
+    return tags, attributes
+  else
+    M.notify('No components found in web-types.json (' .. package_name .. ')', vim.log.levels.WARN)
+    return nil, nil
+  end
+end
+
+--- Load metadata with fallback support
+--- Tries multiple formats and fallback packages
+--- @param root string The project root directory
+--- @param package_name string The package name
+--- @return table|nil, table|nil The parsed tags and attributes or nil if not found
+function M.load_metadata(root, package_name)
+  -- Try Vetur format first
+  local tags = M.load_vetur_tags(root, package_name)
+  local attrs = M.load_vetur_attributes(root, package_name)
+
+  -- Try web-types.json if Vetur not found
+  if not tags or not attrs then
+    M.notify('Vetur files not found for ' .. package_name .. ', trying web-types.json', vim.log.levels.DEBUG)
+    local web_tags, web_attrs = M.load_web_types(root, package_name)
+    if web_tags then
+      tags = tags or web_tags
+      attrs = attrs or web_attrs
+    end
+  end
+
+  -- Try fallback package if still not found
+  if (not tags or not attrs) and config.fallback_packages[package_name] then
+    local fallback_pkg = config.fallback_packages[package_name]
+    M.notify(
+      'Metadata not found for ' .. package_name .. ', trying fallback package: ' .. fallback_pkg,
+      vim.log.levels.INFO
+    )
+
+    -- Check if fallback package is installed
+    if M.is_package_installed(root, fallback_pkg) then
+      -- Try Vetur format from fallback
+      local fb_tags = M.load_vetur_tags(root, fallback_pkg)
+      local fb_attrs = M.load_vetur_attributes(root, fallback_pkg)
+
+      -- Try web-types from fallback if Vetur not found
+      if not fb_tags or not fb_attrs then
+        local fb_web_tags, fb_web_attrs = M.load_web_types(root, fallback_pkg)
+        if fb_web_tags then
+          fb_tags = fb_tags or fb_web_tags
+          fb_attrs = fb_attrs or fb_web_attrs
+        end
+      end
+
+      if fb_tags then
+        tags = tags or fb_tags
+        attrs = attrs or fb_attrs
+        M.notify('Using metadata from fallback package: ' .. fallback_pkg, vim.log.levels.INFO)
+      end
+    else
+      M.notify(
+        'Fallback package ' .. fallback_pkg .. ' is not installed. '
+        .. 'Install it to enable completion for ' .. package_name,
+        vim.log.levels.WARN
+      )
+    end
+  end
+
+  return tags, attrs
 end
 
 --- Detect which Bootstrap Vue packages are installed

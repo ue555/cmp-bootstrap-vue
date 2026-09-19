@@ -12,10 +12,12 @@ Vueファイルでコンポーネントとpropを補完します。
 - Vue 2用の`bootstrap-vue`とVue 3用の`bootstrap-vue-next`に対応
 - `<b-button>`や`<BButton>`などのコンポーネントタグを補完
 - コンポーネントの属性とpropを補完
-- `vetur-tags.json`と`vetur-attributes.json`のドキュメントを表示
+- メタデータファイルからドキュメントを表示
+- 複数のメタデータ形式に対応：VeturとWeb-types.json
+- `bootstrap-vue-next`のメタデータが見つからない場合、自動的に`bootstrap-vue`のメタデータにフォールバック
 - `vue` filetypeでのみ有効
 - プロジェクトごとに結果を60秒間キャッシュ
-- パッケージ名とVeturメタデータのパスを設定可能
+- パッケージ名とメタデータのパスを設定可能
 
 ## 必要要件
 
@@ -23,8 +25,27 @@ Vueファイルでコンポーネントとpropを補完します。
 - [nvim-cmp](https://github.com/hrsh7th/nvim-cmp)
 - `bootstrap-vue`または`bootstrap-vue-next`を含むプロジェクト
 
-パッケージが`dependencies`または`devDependencies`に記載され、
-プロジェクトの`node_modules`以下からVeturメタデータを読み込める必要があります。
+パッケージが`dependencies`または`devDependencies`に記載されている必要があります。
+
+### メタデータ形式のサポート
+
+プラグインは以下の順序でコンポーネントメタデータを検索します：
+
+1. **Vetur形式**：`vetur-tags.json`と`vetur-attributes.json`
+2. **web-types.json**：JetBrains IDE形式
+3. **フォールバックパッケージ**：`bootstrap-vue-next`用に`bootstrap-vue`のメタデータを使用
+
+**bootstrap-vue-nextユーザーへの重要な注意**：`bootstrap-vue-next`はVeturやweb-types.jsonのメタデータファイルを提供していないため、このプラグインは自動的に`bootstrap-vue`のメタデータにフォールバックします。`bootstrap-vue-next`プロジェクトで補完を有効にするには、`bootstrap-vue`を開発依存関係としてインストールしてください：
+
+```bash
+npm install -D bootstrap-vue
+# または
+yarn add -D bootstrap-vue
+# または
+pnpm add -D bootstrap-vue
+```
+
+これにより、プロジェクトで`bootstrap-vue-next`コンポーネントを使用しながら、プラグインは`bootstrap-vue`のメタデータを補完に使用できます。
 
 ## インストール
 
@@ -133,6 +154,9 @@ require("cmp_bootstrap_vue").setup({
     "bootstrap-vue",
     "bootstrap-vue-next",
   },
+  fallback_packages = {
+    ["bootstrap-vue-next"] = "bootstrap-vue",
+  },
   notification_level = vim.log.levels.WARN,
 })
 ```
@@ -142,10 +166,24 @@ require("cmp_bootstrap_vue").setup({
 | `vetur_tags_path` | string | `"dist/vetur-tags.json"` | 各パッケージからのタグメタデータ相対パス |
 | `vetur_attributes_path` | string | `"dist/vetur-attributes.json"` | 各パッケージからの属性メタデータ相対パス |
 | `supported_packages` | string[] | 上記参照 | `package.json`で確認するパッケージ |
+| `fallback_packages` | table | `{ ["bootstrap-vue-next"] = "bootstrap-vue" }` | メタデータが見つからない場合のフォールバックパッケージ |
 | `notification_level` | number | `vim.log.levels.WARN` | 通知する最低severity |
 
-設定したメタデータのパスが存在しない場合は、パッケージ内の`dist/`、
-`lib/`、ルートディレクトリも確認します。
+### メタデータ読み込み戦略
+
+プラグインは各パッケージに対して以下のフォールバック戦略を使用します：
+
+1. Vetur形式を試す（`vetur-tags.json`と`vetur-attributes.json`）
+   - 設定されたパス
+   - `dist/vetur-*.json`
+   - `lib/vetur-*.json`
+   - ルート`vetur-*.json`
+
+2. web-types.json形式を試す
+   - `dist/web-types.json`
+   - ルート`web-types.json`
+
+3. それでも見つからず、フォールバックパッケージが設定されている場合、フォールバックパッケージのメタデータを使用
 
 ## キャッシュAPI
 
@@ -176,7 +214,10 @@ bootstrap_vue.reload()
 
 1. 現在のVueファイルから最も近い`package.json`を検索します。
 2. `dependencies`と`devDependencies`から設定対象のパッケージを確認します。
-3. インストールされた各パッケージからVeturメタデータを読み込みます。
+3. インストールされた各パッケージからメタデータを読み込みます：
+   - まずVetur形式を試す
+   - Veturが見つからない場合、web-types.jsonにフォールバック
+   - どちらも見つからない場合、設定されたフォールバックパッケージを使用
 4. カーソル位置がタグ名または属性の入力位置かを判定します。
 5. 対応する補完候補を`nvim-cmp`へ返します。
 
@@ -190,7 +231,7 @@ bootstrap_vue.reload()
   `<project-root>/node_modules/<package-name>`から参照できる必要があります。
 - 親ディレクトリにhoistされたworkspace依存関係は検索しません。
 - キャッシュ時間は60秒固定です。
-- Vetur JSONメタデータが必要です。`web-types.json`には対応していません。
+- `bootstrap-vue-next`はメタデータファイルを提供していないため、フォールバックとして`bootstrap-vue`をインストールする必要があります。
 
 依存関係が親ディレクトリへhoistされている場合は、使用しているパッケージ
 マネージャーに対応したリンクをプロジェクトの`node_modules`へ作成するか、
