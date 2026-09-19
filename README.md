@@ -46,6 +46,11 @@ pnpm add -D bootstrap-vue
 
 This allows the plugin to use `bootstrap-vue`'s metadata for completion while you use `bootstrap-vue-next` components in your project.
 
+**⚠️ Fallback Limitations**:
+- **Without `bootstrap-vue` installed**: Completion will return 0 items for `bootstrap-vue-next` projects
+- **Component accuracy**: The fallback uses Vue 2 (`bootstrap-vue`) metadata, which may include components that don't exist in Vue 3 (`bootstrap-vue-next`). For example, legacy icon components like `b-icon-alarm` from Vue 2 might appear in completions even though they may not be available in `bootstrap-vue-next`
+- **Best practice**: Only use this fallback as a temporary solution. Consider requesting official metadata support from the bootstrap-vue-next project
+
 ## Installation
 
 After installing the plugin, add `{ name = "bootstrap-vue" }` to your
@@ -230,7 +235,11 @@ in `supported_packages` is used for completion.
   `<project-root>/node_modules/<package-name>`.
 - Hoisted workspace dependencies are not searched in parent directories.
 - The cache duration is fixed at 60 seconds.
-- `bootstrap-vue-next` does not provide metadata files, so `bootstrap-vue` must be installed as a fallback.
+- **bootstrap-vue-next metadata fallback**:
+  - `bootstrap-vue-next` does not provide metadata files, so `bootstrap-vue` must be installed as a fallback
+  - Fallback metadata is from Vue 2 and may include components not available in Vue 3
+  - No validation is performed to check if components actually exist in `node_modules`
+  - Completion suggestions may include non-existent components when using fallback metadata
 
 For a hoisted dependency, create a package-manager-supported link in the
 project's `node_modules` directory or install the dependency in that project.

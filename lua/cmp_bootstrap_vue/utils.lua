@@ -258,7 +258,7 @@ end
 --- Tries multiple formats and fallback packages
 --- @param root string The project root directory
 --- @param package_name string The package name
---- @return table|nil, table|nil The parsed tags and attributes or nil if not found
+--- @return table|nil, table|nil, string|nil The parsed tags, attributes, and source package name or nil if not found
 function M.load_metadata(root, package_name)
   -- Try Vetur format first
   local tags = M.load_vetur_tags(root, package_name)
@@ -274,8 +274,13 @@ function M.load_metadata(root, package_name)
     end
   end
 
+  -- Return if metadata found from the original package
+  if tags and attrs then
+    return tags, attrs, package_name
+  end
+
   -- Try fallback package if still not found
-  if (not tags or not attrs) and config.fallback_packages[package_name] then
+  if config.fallback_packages[package_name] then
     local fallback_pkg = config.fallback_packages[package_name]
     M.notify(
       'Metadata not found for ' .. package_name .. ', trying fallback package: ' .. fallback_pkg,
@@ -298,9 +303,8 @@ function M.load_metadata(root, package_name)
       end
 
       if fb_tags then
-        tags = tags or fb_tags
-        attrs = attrs or fb_attrs
         M.notify('Using metadata from fallback package: ' .. fallback_pkg, vim.log.levels.INFO)
+        return fb_tags, fb_attrs, fallback_pkg
       end
     else
       M.notify(
@@ -311,7 +315,7 @@ function M.load_metadata(root, package_name)
     end
   end
 
-  return tags, attrs
+  return nil, nil, nil
 end
 
 --- Detect which Bootstrap Vue packages are installed

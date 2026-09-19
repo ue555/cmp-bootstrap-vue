@@ -33,6 +33,7 @@ local function get_cache(root)
       tags = {},
       attributes = {},
       packages = {},
+      fallback_info = {}, -- Track which packages used fallback: {package_name -> source_package}
       timestamp = 0,
     }
   end
@@ -62,12 +63,13 @@ local function load_bootstrap_components()
   -- Check if cache is still valid (based on timestamp only)
   local current_time = os.time()
   if project_cache.timestamp > 0 and (current_time - project_cache.timestamp) < 60 then
-    return project_cache.tags, project_cache.attributes, project_cache.packages
+    return project_cache.tags, project_cache.attributes, project_cache.packages, project_cache.fallback_info
   end
 
   local all_tags = {}
   local all_attributes = {}
   local loaded_packages = {}
+  local fallback_info = {}
 
   -- Detect and load from all installed Bootstrap Vue packages
   local packages = utils.detect_bootstrap_packages(root)
@@ -78,19 +80,35 @@ local function load_bootstrap_components()
 
   for _, pkg in ipairs(packages) do
     -- Load metadata with automatic fallback support
-    local tags, attrs = utils.load_metadata(root, pkg)
+    local tags, attrs, source_pkg = utils.load_metadata(root, pkg)
 
     if tags then
+      -- Track if fallback was used
+      if source_pkg and source_pkg ~= pkg then
+        fallback_info[pkg] = source_pkg
+      end
+
       -- Use namespacing to avoid collisions
       for tag_name, tag_info in pairs(tags) do
         local namespaced_key = pkg .. ':' .. tag_name
         if not all_tags[tag_name] then
+          -- First occurrence - use it as the default
           all_tags[tag_name] = tag_info
-          all_tags[tag_name]._source_package = pkg
+          -- Track all packages using this metadata
+          all_tags[tag_name]._used_by = {
+            { requested = pkg, source = source_pkg }
+          }
         else
-          -- Store collision under namespaced key
+          -- Collision detected - add to the used_by list
+          table.insert(all_tags[tag_name]._used_by, {
+            requested = pkg,
+            source = source_pkg
+          })
+          -- Also store under namespaced key for compatibility
           all_tags[namespaced_key] = tag_info
-          all_tags[namespaced_key]._source_package = pkg
+          all_tags[namespaced_key]._used_by = {
+            { requested = pkg, source = source_pkg }
+          }
         end
       end
       table.insert(loaded_packages, pkg)
@@ -117,9 +135,10 @@ local function load_bootstrap_components()
   project_cache.tags = all_tags
   project_cache.attributes = all_attributes
   project_cache.packages = loaded_packages
+  project_cache.fallback_info = fallback_info
   project_cache.timestamp = current_time
 
-  return all_tags, all_attributes, loaded_packages
+  return all_tags, all_attributes, loaded_packages, fallback_info
 end
 
 --- Determine completion context
@@ -191,7 +210,7 @@ function source:complete(params, callback)
   local line = params.context.cursor_line
   local col = params.context.cursor.col
 
-  local tags, attributes, packages = load_bootstrap_components()
+  local tags, attributes, packages, fallback_info = load_bootstrap_components()
 
   -- If no tags loaded, return empty
   if not next(tags) then
@@ -209,20 +228,40 @@ function source:complete(params, callback)
     if current_tag and tags[current_tag] then
       local tag_info = tags[current_tag]
       local tag_attrs = tag_info.attributes or {}
-      local source_pkg = tag_info._source_package or 'unknown'
+
+      -- Check _used_by list for fallback usage
+      local used_by = tag_info._used_by or {}
+      local fallback_warnings = {}
+
+      for _, usage in ipairs(used_by) do
+        -- Check if this is a fallback (requested != source)
+        if usage.source ~= usage.requested then
+          table.insert(fallback_warnings, {
+            requested = usage.requested,
+            source = usage.source
+          })
+        end
+      end
 
       for _, attr_name in ipairs(tag_attrs) do
-        -- Try to find attribute info with or without namespace
+        -- Try to find attribute info
         local attr_key = current_tag .. '/' .. attr_name
-        local namespaced_key = source_pkg .. ':' .. attr_key
-        local attr_info = attributes[attr_key] or attributes[namespaced_key] or {}
+        local attr_info = attributes[attr_key] or {}
+
+        local doc_value = attr_info.description or 'Attribute for ' .. current_tag
+
+        -- Add fallback warnings for each package using fallback
+        for _, warning in ipairs(fallback_warnings) do
+          doc_value = doc_value .. '\n\n⚠️ _Using metadata from `' .. warning.source
+            .. '` (fallback for `' .. warning.requested .. '`). Component may not exist or have different props._'
+        end
 
         table.insert(items, {
           label = attr_name,
           kind = require('cmp').lsp.CompletionItemKind.Property,
           documentation = {
             kind = 'markdown',
-            value = attr_info.description or 'Attribute for ' .. current_tag,
+            value = doc_value,
           },
           insertText = attr_name .. '=""',
           insertTextFormat = 2, -- Snippet format
@@ -236,9 +275,38 @@ function source:complete(params, callback)
       if not tag_name:match(':') then
         -- Only show Bootstrap Vue components (starting with b- or Bs or B)
         if tag_name:match('^[bB]%-') or tag_name:match('^Bs') or tag_name:match('^B[A-Z]') then
-          local source_pkg = tag_info._source_package or 'unknown'
           local doc_value = tag_info.description or 'Bootstrap Vue component'
-          doc_value = doc_value .. '\n\n_Source: ' .. source_pkg .. '_'
+
+          -- Check _used_by list for fallback usage
+          local used_by = tag_info._used_by or {}
+          local fallback_warnings = {}
+          local primary_source = nil
+
+          for _, usage in ipairs(used_by) do
+            if not primary_source then
+              primary_source = usage.requested
+            end
+
+            -- Check if this is a fallback (requested != source)
+            if usage.source ~= usage.requested then
+              table.insert(fallback_warnings, {
+                requested = usage.requested,
+                source = usage.source
+              })
+            end
+          end
+
+          -- Add source information
+          if primary_source then
+            doc_value = doc_value .. '\n\n_Source: ' .. primary_source .. '_'
+          end
+
+          -- Add fallback warnings for each package using fallback
+          for _, warning in ipairs(fallback_warnings) do
+            doc_value = doc_value .. '\n\n⚠️ _Using metadata from `' .. warning.source
+              .. '` (fallback for `' .. warning.requested .. '`). This component may not exist in `'
+              .. warning.requested .. '`._'
+          end
 
           table.insert(items, {
             label = tag_name,

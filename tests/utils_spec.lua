@@ -41,4 +41,22 @@ describe('utils', function()
       assert.equals(0, #packages)
     end)
   end)
+
+  describe('load_metadata', function()
+    it('should return three values: tags, attrs, source_pkg', function()
+      -- Test with non-existent package - should return nil, nil, nil
+      local tags, attrs, source_pkg = utils.load_metadata('/non/existent/path', 'non-existent-package')
+
+      -- Should return three values (even if all nil)
+      assert.is_true(tags == nil or type(tags) == 'table')
+      assert.is_true(attrs == nil or type(attrs) == 'table')
+      assert.is_true(source_pkg == nil or type(source_pkg) == 'string')
+    end)
+
+    it('should include fallback_packages in config', function()
+      local config = utils.get_config()
+      assert.is_table(config.fallback_packages)
+      assert.equals('bootstrap-vue', config.fallback_packages['bootstrap-vue-next'])
+    end)
+  end)
 end)

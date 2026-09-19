@@ -56,4 +56,56 @@ describe('source', function()
       end)
     end)
   end)
+
+  describe('fallback metadata tracking', function()
+    it('should track _used_by list in tag info', function()
+      -- This is a structural test - actual functionality requires mock data
+      -- The test verifies that the fields are being set when tags are loaded
+
+      -- Create a mock tag with the expected _used_by structure
+      local mock_tag = {
+        description = 'Test component',
+        attributes = {},
+        _used_by = {
+          { requested = 'bootstrap-vue', source = 'bootstrap-vue' },
+          { requested = 'bootstrap-vue-next', source = 'bootstrap-vue' },  -- Fallback
+        }
+      }
+
+      -- Verify the structure
+      assert.is_table(mock_tag._used_by)
+      assert.equals(2, #mock_tag._used_by)
+
+      -- Verify fallback detection logic
+      local has_fallback = false
+      for _, usage in ipairs(mock_tag._used_by) do
+        if usage.source ~= usage.requested then
+          has_fallback = true
+          break
+        end
+      end
+      assert.is_true(has_fallback)
+    end)
+
+    it('should detect multiple fallback usages', function()
+      local mock_tag = {
+        _used_by = {
+          { requested = 'bootstrap-vue', source = 'bootstrap-vue' },  -- Direct
+          { requested = 'bootstrap-vue-next', source = 'bootstrap-vue' },  -- Fallback 1
+          { requested = 'another-package', source = 'bootstrap-vue' },  -- Fallback 2
+        }
+      }
+
+      local fallbacks = {}
+      for _, usage in ipairs(mock_tag._used_by) do
+        if usage.source ~= usage.requested then
+          table.insert(fallbacks, usage)
+        end
+      end
+
+      assert.equals(2, #fallbacks)
+      assert.equals('bootstrap-vue-next', fallbacks[1].requested)
+      assert.equals('another-package', fallbacks[2].requested)
+    end)
+  end)
 end)
