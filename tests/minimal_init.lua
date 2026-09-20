@@ -30,3 +30,14 @@ vim.opt.rtp:append('./lua')
 
 -- Required for running tests
 vim.cmd([[runtime! plugin/plenary.vim]])
+
+-- Mock nvim-cmp for testing
+package.loaded['cmp'] = {
+  lsp = {
+    CompletionItemKind = {
+      Property = 1,
+      Class = 2,
+      Keyword = 3,
+    }
+  }
+}

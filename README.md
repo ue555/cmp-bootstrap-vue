@@ -11,6 +11,7 @@ provides component and prop completion in Vue files.
 - Supports `bootstrap-vue` for Vue 2 and `bootstrap-vue-next` for Vue 3
 - Completes component tags such as `<b-button>` and `<BButton>`
 - Completes component attributes and props
+- **NEW:** Completes Bootstrap CSS classes inside `class=""` attributes (e.g., utility classes like `fs-5`, `mb-1`, `text-muted`, and component classes like `btn`, `container`)
 - Shows documentation from metadata files
 - Multiple metadata format support: Vetur and web-types.json
 - Automatic fallback to `bootstrap-vue` metadata when `bootstrap-vue-next` metadata is unavailable
@@ -23,6 +24,7 @@ provides component and prop completion in Vue files.
 - Neovim 0.7 or later
 - [nvim-cmp](https://github.com/hrsh7th/nvim-cmp)
 - A project containing `bootstrap-vue` or `bootstrap-vue-next`
+- **For class completion:** `bootstrap` package with CSS files in `node_modules/bootstrap/dist/css/bootstrap.css`
 
 The package must be listed in `dependencies` or `devDependencies`.
 
@@ -144,6 +146,8 @@ The source recognizes these contexts:
 | `<b-button` | Component tags |
 | `</b-` | Closing component tags |
 | `<b-button ` | Attributes and props |
+| `<div class="` | Bootstrap CSS classes |
+| `<b-button class="fs-` | Bootstrap CSS classes |
 | Text outside a tag | No results |
 
 ## Configuration
@@ -222,8 +226,9 @@ the next completion request.
    - Tries Vetur format first
    - Falls back to web-types.json if Vetur not found
    - Falls back to configured fallback package if neither format is found
-4. Determines whether the cursor is in a tag-name or attribute context.
-5. Returns the appropriate `nvim-cmp` completion items.
+4. Parses Bootstrap CSS file (`node_modules/bootstrap/dist/css/bootstrap.css`) to extract all CSS class names
+5. Determines whether the cursor is in a tag-name, attribute, or class-value context.
+6. Returns the appropriate `nvim-cmp` completion items.
 
 If multiple supported packages define the same component, the first package
 in `supported_packages` is used for completion.

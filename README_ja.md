@@ -12,6 +12,7 @@ Vueファイルでコンポーネントとpropを補完します。
 - Vue 2用の`bootstrap-vue`とVue 3用の`bootstrap-vue-next`に対応
 - `<b-button>`や`<BButton>`などのコンポーネントタグを補完
 - コンポーネントの属性とpropを補完
+- **NEW:** `class=""`属性内でBootstrapのCSSクラスを補完（`fs-5`、`mb-1`、`text-muted`などのユーティリティクラスや、`btn`、`container`などのコンポーネントクラス）
 - メタデータファイルからドキュメントを表示
 - 複数のメタデータ形式に対応：VeturとWeb-types.json
 - `bootstrap-vue-next`のメタデータが見つからない場合、自動的に`bootstrap-vue`のメタデータにフォールバック
@@ -24,6 +25,7 @@ Vueファイルでコンポーネントとpropを補完します。
 - Neovim 0.7以降
 - [nvim-cmp](https://github.com/hrsh7th/nvim-cmp)
 - `bootstrap-vue`または`bootstrap-vue-next`を含むプロジェクト
+- **クラス補完のため:** `node_modules/bootstrap/dist/css/bootstrap.css`にCSSファイルを含む`bootstrap`パッケージ
 
 パッケージが`dependencies`または`devDependencies`に記載されている必要があります。
 
@@ -145,6 +147,8 @@ cmp.setup({
 | `<b-button` | コンポーネントタグ |
 | `</b-` | 終了タグ |
 | `<b-button ` | 属性とprop |
+| `<div class="` | BootstrapのCSSクラス |
+| `<b-button class="fs-` | BootstrapのCSSクラス |
 | タグ外のテキスト | 補完なし |
 
 ## 設定
@@ -223,8 +227,9 @@ bootstrap_vue.reload()
    - まずVetur形式を試す
    - Veturが見つからない場合、web-types.jsonにフォールバック
    - どちらも見つからない場合、設定されたフォールバックパッケージを使用
-4. カーソル位置がタグ名または属性の入力位置かを判定します。
-5. 対応する補完候補を`nvim-cmp`へ返します。
+4. BootstrapのCSSファイル（`node_modules/bootstrap/dist/css/bootstrap.css`）を解析して全てのCSSクラス名を抽出します
+5. カーソル位置がタグ名、属性、またはclass値の入力位置かを判定します。
+6. 対応する補完候補を`nvim-cmp`へ返します。
 
 複数の対応パッケージに同名コンポーネントがある場合は、
 `supported_packages`で先に指定されたパッケージを補完に使用します。
